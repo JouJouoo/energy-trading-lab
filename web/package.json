@@ -1,0 +1,27 @@
+{
+  "name": "energy-trading-lab-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.3",
+    "chart.js": "^4.5.1",
+    "marked": "^18.0.5",
+    "vue": "^3.4.0",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.2.0"
+  }
+}

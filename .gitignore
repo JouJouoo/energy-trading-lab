@@ -10,3 +10,25 @@ dist/
 build/
 node_modules/
 
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data & Logs
+data/
+logs/
+runs_test/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tauri
+web/src-tauri/target/
+
+# Vite
+web/dist/
+

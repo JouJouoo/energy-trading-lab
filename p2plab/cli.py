@@ -6,7 +6,7 @@ import os
 from typing import Any, Dict
 
 from .agent import P2PLabAgent
-from .server import run_server
+from .api.fastapi_server import run_server
 from .utils import read_text
 
 
