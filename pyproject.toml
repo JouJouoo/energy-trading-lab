@@ -1,0 +1,11 @@
+[project]
+name = "energy-trading-lab"
+version = "0.1.0"
+description = "Energy Trading Lab: research simulation and experiment generation agent for energy trading."
+requires-python = ">=3.9"
+readme = "README.md"
+authors = [{ name = "Energy Trading Lab" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

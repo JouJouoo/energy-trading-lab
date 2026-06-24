@@ -1,0 +1,19 @@
+# Core API/runtime
+fastapi>=0.115.0
+uvicorn>=0.30.0
+pydantic>=2.7.0
+
+# Optional scientific stack for richer experiments and plotting
+numpy>=1.26.0
+pandas>=2.2.0
+matplotlib>=3.8.0
+pandapower>=3.0.0
+pypdf>=4.0.0
+
+# Optional Agent/RAG integrations for the production upgrade path
+langchain>=0.3.0
+langgraph>=0.2.0
+chromadb>=0.5.0
+
+# Test tooling
+pytest>=8.0.0
