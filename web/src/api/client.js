@@ -27,6 +27,20 @@ export const api = {
     body: JSON.stringify(payload)
   }),
 
+  uploadDocument: async (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.error || data.detail || `Upload failed: ${res.status}`)
+    }
+    return data
+  },
+
   createJob: (payload) => request('/jobs', {
     method: 'POST',
     body: JSON.stringify(payload)

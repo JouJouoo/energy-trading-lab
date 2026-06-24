@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 
 from ..agent import P2PLabAgent
-from ..document_loader import extract_document_from_base64
+from ..document_loader import extract_document_from_base64, DocumentExtractionError
 from ..llm import llm_status, sanitize_llm_config
 from .workspace import WorkspaceManager
 from .logging import setup_logging, log_api_request, log_error, log_job_event
@@ -184,6 +184,49 @@ async def extract_document(request: ExtractDocumentRequest):
         return result
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".rst", ".tex", ".csv"}
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB
+
+@app.post("/api/upload", tags=["文档管理"])
+async def upload_document(file: UploadFile = File(...)):
+    """
+    上传论文文件（PDF/TXT/Markdown），提取文本内容供 Agent 使用
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="未提供文件名")
+    
+    ext = os.path.splitext(file.filename.lower())[1]
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {ext}。支持的类型: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}"
+        )
+    
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大，最大支持 {MAX_UPLOAD_BYTES // 1024 // 1024}MB"
+        )
+    
+    import base64
+    data_base64 = base64.b64encode(content).decode("ascii")
+    
+    try:
+        result = extract_document_from_base64(file.filename, data_base64)
+        return {
+            "success": True,
+            "filename": result["filename"],
+            "chars": result["chars"],
+            "method": result["method"],
+            "text": result["text"],
+        }
+    except DocumentExtractionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"文件上传失败: {exc}")
+        raise HTTPException(status_code=500, detail=f"文件处理失败: {str(exc)}")
 
 @app.post("/api/jobs", tags=["任务管理"], response_model=JobStatus)
 async def create_job(request: JobRequest, background_tasks: BackgroundTasks):

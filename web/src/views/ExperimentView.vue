@@ -49,6 +49,63 @@ function loadSample() {
   }
 }
 
+const uploading = ref(false)
+const uploadFile = ref(null)
+const uploadInfo = ref(null)
+const uploadError = ref('')
+const fileInput = ref(null)
+
+function triggerFilePicker() {
+  if (fileInput.value) {
+    fileInput.value.click()
+  }
+}
+
+function onFileSelected(event) {
+  const file = event.target.files[0]
+  if (file) {
+    handleFileUpload(file)
+  }
+  if (event.target) {
+    event.target.value = ''
+  }
+}
+
+function onDrop(event) {
+  event.preventDefault()
+  const file = event.dataTransfer.files[0]
+  if (file) {
+    handleFileUpload(file)
+  }
+}
+
+function onDragOver(event) {
+  event.preventDefault()
+}
+
+async function handleFileUpload(file) {
+  if (uploading.value) return
+
+  uploading.value = true
+  uploadError.value = ''
+  uploadInfo.value = null
+  uploadFile.value = file
+
+  try {
+    const result = await api.uploadDocument(file)
+    inputText.value = result.text
+    uploadInfo.value = {
+      filename: result.filename,
+      chars: result.chars,
+      method: result.method
+    }
+  } catch (err) {
+    uploadError.value = err.message || '上传失败'
+  } finally {
+    uploading.value = false
+  }
+}
+
 function getLLMConfig() {
   return {
     provider: llmProvider.value,
@@ -267,7 +324,41 @@ async function loadProject(id) {
         </div>
 
         <label for="input">{{ mode === 'reproduce' ? '论文文本' : '中文理论草稿' }}</label>
-        <textarea v-model="inputText"></textarea>
+
+        <div class="upload-area"
+             :class="{ dragging: false, hasFile: uploadInfo }"
+             @drop="onDrop"
+             @dragover="onDragOver">
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".pdf,.txt,.md,.markdown,.rst,.tex,.csv"
+            @change="onFileSelected"
+            style="display: none"
+          />
+          <div class="upload-content" v-if="!uploading && !uploadInfo">
+            <button type="button" class="upload-btn" @click="triggerFilePicker">
+              📄 上传论文文件
+            </button>
+            <span class="upload-hint">支持 PDF / TXT / Markdown · 拖拽文件到此处</span>
+          </div>
+          <div class="upload-content" v-else-if="uploading">
+            <div class="upload-spinner">⏳</div>
+            <span>正在解析 {{ uploadFile?.name }}...</span>
+          </div>
+          <div class="upload-success" v-else-if="uploadInfo">
+            <div class="upload-filename">✅ {{ uploadInfo.filename }}</div>
+            <div class="upload-meta">
+              提取了 {{ uploadInfo.chars }} 个字符 · 方法: {{ uploadInfo.method }}
+            </div>
+            <button type="button" class="reupload-btn" @click="triggerFilePicker">重新上传</button>
+          </div>
+          <div class="upload-error" v-if="uploadError">
+            ❌ {{ uploadError }}
+          </div>
+        </div>
+
+        <textarea v-model="inputText" placeholder="或在此处直接粘贴论文文本..."></textarea>
 
         <div class="button-row">
           <button class="primary" type="button" @click="runExperiment" :disabled="running">
@@ -487,6 +578,106 @@ textarea {
 textarea:focus, select:focus, input:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(18, 119, 109, 0.12);
+}
+
+.upload-area {
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 10px;
+  background: #fafbfd;
+  text-align: center;
+  transition: all 0.18s ease;
+}
+
+.upload-area.dragging,
+.upload-area:hover {
+  border-color: var(--teal);
+  background: rgba(18, 119, 109, 0.04);
+}
+
+.upload-area.hasFile {
+  border-style: solid;
+  background: #f0f9f7;
+  border-color: var(--teal);
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-btn {
+  background: var(--teal);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.upload-btn:hover {
+  background: #0e5f55;
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.upload-spinner {
+  font-size: 20px;
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.upload-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.upload-filename {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--teal);
+}
+
+.upload-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.reupload-btn {
+  background: transparent;
+  color: var(--teal);
+  border: 1px solid var(--teal);
+  border-radius: 5px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.reupload-btn:hover {
+  background: var(--teal);
+  color: #fff;
+}
+
+.upload-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #c0392b;
 }
 
 .llm-panel {
