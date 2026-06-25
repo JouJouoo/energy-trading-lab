@@ -8,11 +8,26 @@ from datetime import datetime
 
 from ..database import Database
 
+
+def get_data_root() -> str:
+    """Resolve the data root per the contract in `AGENTS.md`.
+
+    Precedence: `ENERGY_LAB_DATA_DIR` env var if set, else `./data`.
+    Lives in this module (not `fastapi_server`) so the CLI can compute
+    paths without importing FastAPI.
+    """
+    env = os.environ.get("ENERGY_LAB_DATA_DIR")
+    if env:
+        return os.path.abspath(env)
+    return os.path.abspath("./data")
+
+
 class WorkspaceManager:
-    def __init__(self, run_root: str = "runs"):
+    def __init__(self, run_root: str = "runs", db_path: str = "data/db.sqlite"):
         self.run_root = run_root
+        self.db_path = db_path
         Path(run_root).mkdir(parents=True, exist_ok=True)
-        self.db = Database()
+        self.db = Database(db_path=db_path)
     
     def list_projects(self) -> List[Dict[str, any]]:
         db_projects = self.db.list_projects()

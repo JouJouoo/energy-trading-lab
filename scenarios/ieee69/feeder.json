@@ -1,0 +1,15 @@
+{
+  "name": "ieee69",
+  "display_name": "IEEE 69-Bus Radial Feeder (Approximation)",
+  "bus_count": 69,
+  "base_voltage_kv": 12.66,
+  "base_mva": 10.0,
+  "frequency_hz": 60,
+  "slack_bus": 1,
+  "buses": [
+    {"id": 1, "type": "slack", "voltage_pu": 1.0}
+  ],
+  "lines": [],
+  "transformers": [],
+  "_note": "Branch data is generated procedurally in p2plab/grid.py:ieee69_case(); the in-source generator is the canonical source for the 69-bus case until a published 69-bus dataset is wired in (see docs/roadmap.md 0.3.x)."
+}

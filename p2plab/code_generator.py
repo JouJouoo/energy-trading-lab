@@ -6,6 +6,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .llm import call_chat_json, llm_status
 from .module_validator import ModuleValidator
+from .plugin_loader import discover_algorithm_templates
+from .plugin_manifest import AlgorithmTemplate, family_directory
 from .schemas import (
     DetailedInnovationSpec,
     GeneratedModule,
@@ -22,6 +24,10 @@ BASE_MODULES = [
     ("market_env", "market_env", "market_env"),
 ]
 
+# Back-compat fallback. The plugin system (`plugin_loader.discover_algorithm_templates`)
+# is the primary source of truth; this map is used only when discovery returns
+# no templates (e.g. in a misconfigured test environment). See
+# `docs/skills-protocol.md` and `CHANGELOG.md` 0.2.0.
 ALGORITHM_MODULE_MAP = {
     "RL": [
         ("reward", "reward", "reward"),
@@ -67,11 +73,21 @@ class CodeGenerator:
         llm_config: Optional[Dict[str, Any]] = None,
         max_repair_attempts: int = 3,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        templates: Optional[List[AlgorithmTemplate]] = None,
     ):
         self.llm_config = llm_config
         self.validator = ModuleValidator(max_repair_attempts=max_repair_attempts)
         self.progress_callback = progress_callback
         self.use_llm = llm_status(llm_config).get("enabled", False)
+        # Plugin-system source of truth. If the caller did not pass a list,
+        # the loader scans the configured roots. See `docs/skills-protocol.md`.
+        if templates is None:
+            self._templates = discover_algorithm_templates()
+        else:
+            self._templates = list(templates)
+        # When discovery returns nothing, fall back to the legacy
+        # ALGORITHM_MODULE_MAP so the MVP still runs.
+        self._use_legacy_map = len(self._templates) == 0
 
     def plan_modules(
         self,
@@ -81,8 +97,12 @@ class CodeGenerator:
         """Plan which modules to generate based on algorithm type.
 
         Returns list of dicts with: module_name, file_name, template_type
+
+        When the plugin system has discovered templates for the family, the
+        plan is built from those templates' `affected_modules` and `file_name`
+        fields. Otherwise the legacy `ALGORITHM_MODULE_MAP` is consulted.
         """
-        modules = []
+        modules: List[Dict[str, str]] = []
         for module_name, file_name, template_type in BASE_MODULES:
             modules.append({
                 "module_name": module_name,
@@ -90,6 +110,17 @@ class CodeGenerator:
                 "template_type": template_type,
                 "category": "base",
             })
+
+        family_templates = self._resolve_family_templates(algorithm_family)
+        if family_templates:
+            for template in family_templates:
+                modules.append({
+                    "module_name": template.name,
+                    "file_name": template.file_name,
+                    "template_type": template.name,
+                    "category": "algorithm",
+                })
+            return modules
 
         algo_modules = ALGORITHM_MODULE_MAP.get(algorithm_family, [])
         for module_name, file_name, template_type in algo_modules:
@@ -99,8 +130,30 @@ class CodeGenerator:
                 "template_type": template_type,
                 "category": "algorithm",
             })
-
         return modules
+
+    def _resolve_family_templates(
+        self,
+        algorithm_family: str,
+    ) -> List[AlgorithmTemplate]:
+        """Return the discovered templates for the given family, or []."""
+        if self._use_legacy_map:
+            return []
+        canonical = family_directory(algorithm_family)
+        return [t for t in self._templates if t.family in (algorithm_family, canonical)]
+
+    def resolve_template(
+        self,
+        algorithm_family: str,
+        template_name: str,
+    ) -> Optional[AlgorithmTemplate]:
+        """Return the discovered template by name within a family, or None."""
+        if self._use_legacy_map:
+            return None
+        for template in self._resolve_family_templates(algorithm_family):
+            if template.name == template_name:
+                return template
+        return None
 
     def generate_all_modules(
         self,
@@ -241,7 +294,13 @@ class CodeGenerator:
         return f"# Template for {template_type} not found\n"
 
     def _load_algorithm_template(self, algorithm_family: str, template_type: str) -> str:
-        """Load an algorithm template."""
+        """Load an algorithm template.
+
+        Looks up the discovered template by name first; falls back to the
+        legacy `algorithm_templates/<family>/<template_type>.py` disk path
+        when discovery has no match. The legacy path is also used as a
+        safety net for back-compat tests.
+        """
         family_dirs = {
             "RL": "RL",
             "RL/MARL": "RL",
@@ -250,6 +309,13 @@ class CodeGenerator:
             "Game Theory": "GameTheory",
             "Rule-based": "RuleBased",
         }
+        if not self._use_legacy_map:
+            for template in self._resolve_family_templates(algorithm_family):
+                if template.name == template_type and template.source:
+                    impl_path = Path(template.source) / template.file_name
+                    if impl_path.exists():
+                        with open(impl_path, "r", encoding="utf-8") as f:
+                            return f.read()
         family_dir = family_dirs.get(algorithm_family, "RL")
         template_path = TEMPLATE_DIR / family_dir / f"{template_type}.py"
         if template_path.exists():

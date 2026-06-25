@@ -71,5 +71,9 @@ export const api = {
   getProjectMetrics: (runId) => request(`/workspace/projects/${runId}/metrics`),
   getProjectTrace: (runId) => request(`/workspace/projects/${runId}/trace`),
   getProjectReport: (runId) => request(`/workspace/projects/${runId}/report`),
-  getProjectArtifact: (runId, artifactName) => request(`/workspace/projects/${runId}/artifact/${artifactName}`)
+  getProjectArtifact: (runId, artifactName) => request(`/workspace/projects/${runId}/artifact/${artifactName}`),
+
+  listAlgorithms: () => request('/plugins/algorithms'),
+  listScenarios: () => request('/plugins/scenarios'),
+  listProviders: () => request('/llm-status')
 }

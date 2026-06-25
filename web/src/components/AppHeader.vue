@@ -30,6 +30,10 @@ function goWorkspace() {
 function goExperiment() {
   router.push('/experiment')
 }
+
+function goPlugins() {
+  router.push('/plugins')
+}
 </script>
 
 <template>
@@ -55,6 +59,13 @@ function goExperiment() {
         @click="goExperiment"
       >
         实验工作台
+      </button>
+      <button
+        class="nav-btn"
+        :class="{ active: route.name === 'plugins' }"
+        @click="goPlugins"
+      >
+        插件
       </button>
       <div class="status">
         <span class="dot" :class="{ ready: llmReady }"></span>

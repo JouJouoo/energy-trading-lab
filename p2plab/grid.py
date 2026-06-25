@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Tuple
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .utils import clamp
 
@@ -24,6 +26,7 @@ class GridCase:
     base_load_kvar: Dict[int, float]
     v_min_pu: float = 0.95
     v_max_pu: float = 1.05
+    source: Optional[str] = None
 
     @property
     def buses(self) -> List[int]:
@@ -168,12 +171,125 @@ def ieee69_case() -> GridCase:
 
 
 def load_grid_case(name: str) -> GridCase:
+    """Load a grid case by name.
+
+    Resolution order:
+
+    1. A scenario discovered by `p2plab.plugin_loader.discover_scenarios()`
+       whose `name` matches `name` (case-insensitive, with `-` / `_`
+       normalization). The `feeder.json` inside the scenario folder is
+       loaded and converted to a `GridCase`.
+    2. The legacy in-source constants for the canonical benchmarks
+       (IEEE 33 / IEEE 69). This is the back-compat fallback for callers
+       that do not have any scenarios/ folder on disk.
+    3. Raises `ValueError` for an unknown name.
+
+    Adding a new grid case is therefore a matter of dropping a folder at
+    `scenarios/<name>/` with a `SCENARIO.md` + `feeder.json`. No code
+    change in `grid.py` is required. See `docs/scenarios-protocol.md`.
+    """
     normalized = name.lower().replace("-", "").replace("_", "")
+
+    # 1) Plugin loader
+    try:
+        from .plugin_loader import get_scenario
+
+        scenario = get_scenario(name) or get_scenario(normalized)
+        if scenario is not None and scenario.source:
+            feeder_path = Path(scenario.source) / scenario.feeder_file
+            if feeder_path.exists():
+                return _grid_case_from_feeder_json(
+                    scenario_name=scenario.name,
+                    feeder_path=feeder_path,
+                    v_min_pu=scenario.voltage_limits[0],
+                    v_max_pu=scenario.voltage_limits[1],
+                    source=str(feeder_path),
+                )
+    except Exception:
+        # Discovery or parsing errors must not break the legacy path.
+        pass
+
+    # 2) Legacy in-source constants
     if normalized in ("ieee33", "33", "case33", "case33bw"):
         return ieee33_case()
     if normalized in ("ieee69", "69", "case69"):
         return ieee69_case()
+
     raise ValueError("Unsupported grid case: %s" % name)
+
+
+def _grid_case_from_feeder_json(
+    *,
+    scenario_name: str,
+    feeder_path: Path,
+    v_min_pu: float,
+    v_max_pu: float,
+    source: str,
+) -> GridCase:
+    """Convert a `feeder.json` file into a `GridCase`.
+
+    If the JSON file has no `lines` (i.e. it is a stub pointing to an
+    in-source generator for back-compat), this falls back to the legacy
+    in-source constants for the canonical benchmarks.
+    """
+    with open(feeder_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    branches: List[Branch] = []
+    for line in data.get("lines", []):
+        branches.append(
+            Branch(
+                from_bus=int(line["from"]),
+                to_bus=int(line["to"]),
+                r_ohm=float(line.get("r_ohm", 0.0)),
+                x_ohm=float(line.get("x_ohm", 0.0)),
+            )
+        )
+
+    if not branches:
+        # Stub JSON — fall back to the legacy in-source generator.
+        normalized = scenario_name.lower().replace("-", "").replace("_", "")
+        if normalized in ("ieee33", "33", "case33", "case33bw"):
+            legacy = ieee33_case()
+            legacy.source = source
+            return legacy
+        if normalized in ("ieee69", "69", "case69"):
+            legacy = ieee69_case()
+            legacy.source = source
+            return legacy
+        # Unknown name with no branches; return an empty GridCase.
+        # Callers will see bus_count > 0 but no branches, which will fail
+        # downstream — that's the intended loud failure.
+
+    slack_bus = int(data.get("slack_bus", 1))
+    base_load_kw: Dict[int, float] = {}
+    base_load_kvar: Dict[int, float] = {}
+
+    for bus in data.get("buses", []):
+        bus_id = int(bus.get("id", 0))
+        if bus_id == 0:
+            continue
+        if "load_kw" in bus:
+            base_load_kw[bus_id] = float(bus["load_kw"])
+        if "load_kvar" in bus:
+            base_load_kvar[bus_id] = float(bus["load_kvar"])
+
+    bus_count = int(
+        data.get("bus_count")
+        or max([slack_bus] + [b.to_bus for b in branches] + list(base_load_kw.keys()))
+    )
+
+    return GridCase(
+        name=scenario_name,
+        bus_count=bus_count,
+        slack_bus=slack_bus,
+        branches=branches,
+        base_load_kw=base_load_kw,
+        base_load_kvar=base_load_kvar,
+        v_min_pu=v_min_pu,
+        v_max_pu=v_max_pu,
+        source=source,
+    )
 
 
 class SimplePowerFlowValidator:

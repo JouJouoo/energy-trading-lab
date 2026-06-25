@@ -426,10 +426,16 @@ def summarize_result_static(result: Dict[str, Any]) -> Dict[str, Any]:
         "executions": result.get("executions", []),
     }
 
+
 def run_server(host: str = "127.0.0.1", port: int = 8765, run_root: str = "runs") -> None:
     global RUN_ROOT
-    RUN_ROOT = run_root
-    
+    # If the caller did not pass an explicit run_root, derive one from
+    # the data root so the contract in `AGENTS.md` is honored.
+    if run_root == "runs" and os.environ.get("ENERGY_LAB_DATA_DIR"):
+        RUN_ROOT = os.path.join(get_data_root(), "runs")
+    else:
+        RUN_ROOT = run_root
+
     import uvicorn
     uvicorn.run(
         "p2plab.api.fastapi_server:app",
@@ -438,6 +444,33 @@ def run_server(host: str = "127.0.0.1", port: int = 8765, run_root: str = "runs"
         reload=True,
         log_level="info"
     )
+
+
+# ---------------------------------------------------------------------------
+# Plugin surfaces (added in 0.2.0)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/plugins/algorithms", tags=["插件"])
+def list_algorithms_endpoint():
+    """List discovered algorithm templates (built-in + user-installed)."""
+    from ..plugin_loader import list_algorithm_templates_with_runtime
+    templates = list_algorithm_templates_with_runtime()
+    return {
+        "count": len(templates),
+        "templates": [t.to_dict() for t in templates],
+    }
+
+
+@app.get("/api/plugins/scenarios", tags=["插件"])
+def list_scenarios_endpoint():
+    """List discovered simulation scenarios (built-in + user-installed)."""
+    from ..plugin_loader import list_scenarios_with_runtime
+    scenarios = list_scenarios_with_runtime()
+    return {
+        "count": len(scenarios),
+        "scenarios": [s.to_dict() for s in scenarios],
+    }
+
 
 if __name__ == "__main__":
     run_server()

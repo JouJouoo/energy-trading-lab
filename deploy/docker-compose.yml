@@ -1,0 +1,27 @@
+services:
+  energy-trading-lab-backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: energy-trading-lab:0.2.0
+    container_name: energy-trading-lab
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ENERGY_LAB_DATA_DIR: /app/data
+      ENERGY_LAB_RUN_ROOT: /app/runs
+    ports:
+      - "${ENERGY_LAB_PORT:-8765}:8765"
+    volumes:
+      - ./data:/app/data
+      - ./runs:/app/runs
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2).status==200 else 1)"
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
